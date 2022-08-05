@@ -13,8 +13,18 @@ use blog_os::println;
 pub extern "C" fn _start() -> ! {
     println!("hello world{}", "!");
 
+    blog_os::init();
+
+    x86_64::instructions::interrupts::int3();
+
     #[cfg(test)]
     test_main();
+
+    println!("It did not crash!");
+
+    unsafe {
+        *(0xdeadbeaf as *mut u64) = 42;
+    }
 
     loop {}
 }
