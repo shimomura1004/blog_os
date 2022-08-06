@@ -15,6 +15,12 @@ pub extern "C" fn _start() -> ! {
 
     blog_os::init();
 
+    use x86_64::registers::control::Cr3;
+
+    // CR3 に最上位のページテーブルの物理アドレスが入っている
+    let (level4_page_table, _) = Cr3::read();
+    println!("Level 4 page table at: {:?}", level4_page_table.start_address());
+
     let valid_ptr = 0x204a23 as *mut u64;
     unsafe { let _x = *valid_ptr; }
     println!("read worked");
