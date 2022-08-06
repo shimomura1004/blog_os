@@ -15,18 +15,20 @@ pub extern "C" fn _start() -> ! {
 
     blog_os::init();
 
-    x86_64::instructions::interrupts::int3();
+    let valid_ptr = 0x204a23 as *mut u64;
+    unsafe { let _x = *valid_ptr; }
+    println!("read worked");
+
+    let invalid_ptr = 0xdeadbeaf as *mut u64;
+    // ここで範囲外アクセスが起こってページフォルトが発生する
+    unsafe { *invalid_ptr = 42; }
 
     #[cfg(test)]
     test_main();
 
     println!("It did not crash!");
 
-    unsafe {
-        *(0xdeadbeaf as *mut u64) = 42;
-    }
-
-    loop {}
+    blog_os::hlt_loop();
 }
 
 #[cfg(not(test))]
