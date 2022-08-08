@@ -8,12 +8,15 @@
 #![reexport_test_harness_main = "test_main"]
 #![feature(abi_x86_interrupt)]
 
+#[cfg(test)]
+use bootloader::{BootInfo, entry_point};
 use core::panic::PanicInfo;
 
 pub mod vga_buffer;
 pub mod serial;
 pub mod interrupts;
 pub mod gdt;
+pub mod memory;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u32)]
@@ -75,13 +78,14 @@ pub fn init() {
 }
 
 #[cfg(test)]
-#[no_mangle]
-pub extern "C" fn _start() -> ! {
+entry_point!(test_kernel_main);
+
+#[cfg(test)]
+fn test_kernel_main(_boot_info: &'static BootInfo) -> ! {
     init();
     test_main();
     loop {}
 }
-
 
 #[cfg(test)]
 #[panic_handler]

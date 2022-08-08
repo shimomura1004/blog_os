@@ -6,28 +6,39 @@
 // 標準だとテスト用の main 関数を作るが、この場合 main は呼ばれないので困る
 #![reexport_test_harness_main = "test_main"]
 
+use bootloader::{entry_point, BootInfo};
+use x86_64::structures::paging::PageTable;
 use core::panic::PanicInfo;
 use blog_os::println;
 
-#[no_mangle]
-pub extern "C" fn _start() -> ! {
-    println!("hello world{}", "!");
+entry_point!(kernel_main);
 
+fn kernel_main(boot_info: &'static BootInfo) -> ! {
+    use blog_os::memory::active_level_4_table;
+    use x86_64::VirtAddr;
+
+    println!("hello world{}", "!");
     blog_os::init();
 
-    use x86_64::registers::control::Cr3;
+    let phys_mem_offset = VirtAddr::new(boot_info.physical_memory_offset);
+    let l4_table = unsafe { active_level_4_table(phys_mem_offset) };
 
-    // CR3 に最上位のページテーブルの物理アドレスが入っている
-    let (level4_page_table, _) = Cr3::read();
-    println!("Level 4 page table at: {:?}", level4_page_table.start_address());
+    for (i, entry) in l4_table.iter().enumerate() {
+        if !entry.is_unused() {
+            println!("L4 entry {}: {:?}", i, entry);
 
-    let valid_ptr = 0x204a23 as *mut u64;
-    unsafe { let _x = *valid_ptr; }
-    println!("read worked");
+            let phys = entry.frame().unwrap().start_address();
+            let virt = phys.as_u64() + boot_info.physical_memory_offset;
+            let ptr = VirtAddr::new(virt).as_mut_ptr();
+            let l3_table: &PageTable = unsafe { &*ptr };
 
-    let invalid_ptr = 0xdeadbeaf as *mut u64;
-    // ここで範囲外アクセスが起こってページフォルトが発生する
-    unsafe { *invalid_ptr = 42; }
+            for (i, entry) in l3_table.iter().enumerate() {
+                if !entry.is_unused() {
+                    println!("L3 entry {}: {:?}", i, entry);
+                }
+            }
+        }
+    }
 
     #[cfg(test)]
     test_main();
