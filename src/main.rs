@@ -14,6 +14,7 @@ entry_point!(kernel_main);
 
 fn kernel_main(boot_info: &'static BootInfo) -> ! {
     use blog_os::memory;
+    use blog_os::memory::BootInfoFrameAllocatior;
     use x86_64::{structures::paging::Page, VirtAddr};
 
     println!("hello world{}", "!");
@@ -21,7 +22,9 @@ fn kernel_main(boot_info: &'static BootInfo) -> ! {
 
     let phys_mem_offset = VirtAddr::new(boot_info.physical_memory_offset);
     let mut mapper = unsafe { memory::init(phys_mem_offset) };
-    let mut frame_allocator = memory::EmptyFrameAllocator;
+    let mut frame_allocator = unsafe {
+        BootInfoFrameAllocatior::init(&boot_info.memory_map)
+    };
 
     // アドレス 0 のページを作り、VGA のメモリにマップさせる
     // NULL ポインタアクセスをページフォルトにするためにマップしないのが普通なので

@@ -5,6 +5,51 @@ use x86_64::{
     structures::paging::OffsetPageTable,
     structures::paging::{Page, PhysFrame, Mapper, Size4KiB, FrameAllocator}
 };
+use bootloader::bootinfo::{MemoryMap, MemoryRegionType};
+
+pub struct BootInfoFrameAllocatior {
+    memory_map: &'static MemoryMap,
+    next: usize,
+}
+
+// ブートローダから渡されたメモリマップを使って空きフレームを探すアロケータ
+impl BootInfoFrameAllocatior {
+    // 割り当てるフレームが本当に他で使われていないか(名前がつけられていないか)が
+    // この関数側では保証できないので unsafe とする
+    pub unsafe fn init(memory_map: &'static MemoryMap) -> Self {
+        BootInfoFrameAllocatior {
+            memory_map,
+            next: 0,
+        }
+    }
+
+    // 未使用のフレーム(物理領域)を順番に返す
+    fn usable_frames(&self) -> impl Iterator<Item = PhysFrame> {
+        // メモリマップを走査して未使用フレームを抽出
+        let regions = self.memory_map.iter();
+        let usable_regions = regions
+            .filter(|r| r.region_type == MemoryRegionType::Usable);
+
+        let addr_ranges = usable_regions
+            .map(|r| r.range.start_addr() .. r.range.end_addr());
+
+        // 各アドレス領域(開始から終了までの区間)それぞれに対し、ページ1つ分ごとでアドレスを抽出
+        // 4KiB 以外のページがあることを考慮？
+        let frame_addresses = addr_ranges.flat_map(|r| r.step_by(4096));
+
+        frame_addresses.map(|addr| PhysFrame::containing_address(PhysAddr::new(addr)))
+    }
+}
+
+unsafe impl FrameAllocator<Size4KiB> for BootInfoFrameAllocatior {
+    fn allocate_frame(&mut self) -> Option<PhysFrame> {
+        // 使用可能なフレームのうち最初のひとつを選び返す
+        // 毎回イテレータを作っているので効率は悪い
+        let frame = self.usable_frames().nth(self.next);
+        self.next += 1;
+        frame
+    }
+}
 
 pub fn create_example_mapping(
     page: Page,
@@ -26,13 +71,13 @@ pub fn create_example_mapping(
     map_to_result.expect("map_to failed").flush();
 }
 
-pub struct EmptyFrameAllocator;
+// pub struct EmptyFrameAllocator;
 
-unsafe impl FrameAllocator<Size4KiB> for EmptyFrameAllocator {
-    fn allocate_frame(&mut self) -> Option<PhysFrame<Size4KiB>> {
-        None
-    }
-}
+// unsafe impl FrameAllocator<Size4KiB> for EmptyFrameAllocator {
+//     fn allocate_frame(&mut self) -> Option<PhysFrame<Size4KiB>> {
+//         None
+//     }
+// }
 
 // mut な参照を返す関数なので、何回も呼ばれて複数の名前で同一のメモリを参照すると危険
 // init からのみ呼び出すようにする
