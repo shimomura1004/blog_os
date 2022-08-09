@@ -14,26 +14,26 @@ entry_point!(kernel_main);
 
 fn kernel_main(boot_info: &'static BootInfo) -> ! {
     use blog_os::memory;
-    use x86_64::{structures::paging::Translate, VirtAddr};
+    use x86_64::{structures::paging::Page, VirtAddr};
 
     println!("hello world{}", "!");
     blog_os::init();
 
     let phys_mem_offset = VirtAddr::new(boot_info.physical_memory_offset);
-    let mapper = unsafe { memory::init(phys_mem_offset) };
+    let mut mapper = unsafe { memory::init(phys_mem_offset) };
+    let mut frame_allocator = memory::EmptyFrameAllocator;
 
-    let addresses = [
-        0xb8000,
-        0x201008,
-        0x0100_0020_1a10,
-        boot_info.physical_memory_offset,
-    ];
+    // アドレス 0 のページを作り、VGA のメモリにマップさせる
+    // NULL ポインタアクセスをページフォルトにするためにマップしないのが普通なので
+    // アドレス 0 は未使用のはず、かつ、ブートローダが確実にメモリ先頭付近のL4~L1エントリを作っているはず
+    let page = Page::containing_address(VirtAddr::new(0));
+    memory::create_example_mapping(page, &mut mapper, &mut frame_allocator);
 
-    for &address in &addresses {
-        let virt = VirtAddr::new(address);
-        let phys = mapper.translate_addr(virt);
-        println!("{:?} -> {:?}", virt, phys);
-    }
+    // VGA にマップできたか確認する
+    let page_ptr: *mut u64 = page.start_address().as_mut_ptr();
+    // 0 バイト目に書くとスクロールしてすぐ消えるので、少し後ろ(400)にする
+    // 書き込むバイト列は文字列
+    unsafe { page_ptr.offset(400).write_volatile(0x_f021_f077_f065_f04e) };
 
     #[cfg(test)]
     test_main();

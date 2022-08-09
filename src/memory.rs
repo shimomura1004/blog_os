@@ -1,8 +1,38 @@
 use x86_64::{
+    PhysAddr,
     VirtAddr,
     structures::paging::PageTable,
     structures::paging::OffsetPageTable,
+    structures::paging::{Page, PhysFrame, Mapper, Size4KiB, FrameAllocator}
 };
+
+pub fn create_example_mapping(
+    page: Page,
+    mapper: &mut OffsetPageTable,
+    frame_allocator: &mut impl FrameAllocator<Size4KiB>
+) {
+    use x86_64::structures::paging::PageTableFlags as Flags;
+
+    // 物理アドレス 0xb8000 を含むフレームを作成(ページテーブルはここを指すように修正される)
+    // フレームが物理、ページは仮想
+    let frame = PhysFrame::containing_address(PhysAddr::new(0xb8000));
+    let flags = Flags::PRESENT | Flags::WRITABLE;
+
+    // 新たなマッピングを追加(page で渡される仮想アドレスを 0xb8000 にマッピング)
+    // 戻り値の型の map_to は、追加したページ をTLB からクリアする flush メソッドを持っている
+    let map_to_result = unsafe {
+        mapper.map_to(page, frame, flags, frame_allocator)
+    };
+    map_to_result.expect("map_to failed").flush();
+}
+
+pub struct EmptyFrameAllocator;
+
+unsafe impl FrameAllocator<Size4KiB> for EmptyFrameAllocator {
+    fn allocate_frame(&mut self) -> Option<PhysFrame<Size4KiB>> {
+        None
+    }
+}
 
 // mut な参照を返す関数なので、何回も呼ばれて複数の名前で同一のメモリを参照すると危険
 // init からのみ呼び出すようにする
